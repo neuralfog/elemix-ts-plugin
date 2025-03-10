@@ -17,3 +17,13 @@ What a fucking nightmare no documentation available for LSP plugins, there is so
 
 Plugins loads and logs are stored... Fuck typescript server logs, who the fuck knows where that goes :shrug: Not in lsp.log!! This seems to be working rework the logger!!
 
+Biome Disable Unused Imports, typescript will report them:
+```json
+"linter": {
+    "rules": {
+      "correctness": {
+        "noUnusedImports": "error"
+      }
+    }
+  }
+```
