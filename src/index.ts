@@ -186,12 +186,25 @@ const getUsedComponents = (
     return used;
 };
 
+const getImportInsertionPosition = (sourceFile: ts.SourceFile): number => {
+    let lastImportEnd = 0;
+    sourceFile.forEachChild((node) => {
+        if (
+            ts.isImportDeclaration(node) ||
+            ts.isImportEqualsDeclaration(node)
+        ) {
+            lastImportEnd = node.getEnd();
+        }
+    });
+    return lastImportEnd;
+};
+
 function init({
     typescript,
 }: { typescript: typeof ts }): tsServer.server.PluginModule {
     return {
         create(info: tsServer.server.PluginCreateInfo) {
-            logger.info('Plugin Initialized...');
+            logger.log('Plugin Initialized...');
             const languageService = info.languageService;
 
             // Override completions provider.
@@ -215,7 +228,7 @@ function init({
                     isInsideHtmlTemplate(sourceFile, position, typescript)
                 ) {
                     const components = getAllComponents(program);
-                    logger.info(
+                    logger.log(
                         `Found components: ${JSON.stringify(components)}`,
                     );
                     const customEntries = components.map((comp) => ({
@@ -353,6 +366,114 @@ function init({
                 visit(sourceFile);
 
                 return [...baseDiags, ...pluginDiags];
+            };
+
+            const oldGetCodeFixesAtPosition =
+                languageService.getCodeFixesAtPosition;
+            languageService.getCodeFixesAtPosition = (
+                fileName,
+                start,
+                end,
+                errorCodes,
+                formatOptions,
+                preferences,
+            ) => {
+                try {
+                    if (errorCodes.includes(9999)) {
+                        const customFixes: ts.CodeFixAction[] = [];
+                        const program = languageService.getProgram();
+                        if (program) {
+                            const sourceFile = program.getSourceFile(fileName);
+                            if (sourceFile) {
+                                // Compute insertion position after the last import.
+                                const insertionPos =
+                                    getImportInsertionPosition(sourceFile);
+                                // Compute the appropriate newline: if the character before insertion is not a newline, add one.
+                                const fileText = sourceFile.getFullText();
+                                const needsNewLine =
+                                    insertionPos === 0 ||
+                                    fileText[insertionPos - 1] === '\n'
+                                        ? ''
+                                        : '\n';
+                                const diags =
+                                    languageService.getSemanticDiagnostics(
+                                        fileName,
+                                    );
+                                for (const diag of diags) {
+                                    if (
+                                        diag.code === 9999 &&
+                                        diag.start !== undefined &&
+                                        diag.start <= start &&
+                                        diag.start + (diag.length || 0) >= end
+                                    ) {
+                                        // Extract the component name.
+                                        const match =
+                                            /Component <(.*?)> is used in template but not imported/.exec(
+                                                diag.messageText.toString(),
+                                            );
+                                        if (match) {
+                                            const componentName = match[1];
+                                            const allComponents =
+                                                getAllComponents(program);
+                                            const componentInfo =
+                                                allComponents.find(
+                                                    (c) =>
+                                                        c.name ===
+                                                        componentName,
+                                                );
+                                            if (componentInfo) {
+                                                const importPathText =
+                                                    getImportPath(
+                                                        fileName,
+                                                        componentInfo.file,
+                                                    );
+                                                const newText = `${needsNewLine}import { ${componentName} } from '${importPathText}';\n`;
+                                                const fix: ts.CodeFixAction = {
+                                                    fixName: 'importComponent',
+                                                    fixId: 'importComponent',
+                                                    fixAllDescription:
+                                                        'Import all missing component imports',
+                                                    description: `Import component ${componentName}`,
+                                                    changes: [
+                                                        {
+                                                            fileName,
+                                                            textChanges: [
+                                                                {
+                                                                    newText,
+                                                                    span: {
+                                                                        start: insertionPos,
+                                                                        length: 0,
+                                                                    },
+                                                                },
+                                                            ],
+                                                        },
+                                                    ],
+                                                    commands: [],
+                                                };
+                                                customFixes.push(fix);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return customFixes;
+                    }
+                    // Otherwise, fallback to the original code fixes.
+                    return (
+                        oldGetCodeFixesAtPosition.call(
+                            languageService,
+                            fileName,
+                            start,
+                            end,
+                            errorCodes,
+                            formatOptions,
+                            preferences,
+                        ) || []
+                    );
+                } catch (error) {
+                    logger.log(error, 'ERROR');
+                }
             };
 
             return languageService;

@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { inspect } from 'node:util';
 
 class Logger {
     private file = path.join(
@@ -17,14 +18,24 @@ class Logger {
         }
     }
 
-    private log(label: string, message: unknown): void {
+    private formatMessage(message: unknown): string {
+        if (message instanceof Error) {
+            return message.stack || message.message;
+        }
+        return typeof message === 'object'
+            ? inspect(message, { depth: null })
+            : String(message);
+    }
+
+    private $log(label: string, message: unknown): void {
         const timestamp = new Date().toISOString();
-        const logEntry = `[${label}][${timestamp}] ${JSON.stringify(message)}\n`;
+        const output = this.formatMessage(message);
+        const logEntry = `[${label}][${timestamp}] ${output}\n`;
         fs.appendFileSync(this.file, logEntry, { encoding: 'utf8' });
     }
 
-    public info(message: unknown, label = 'INFO'): void {
-        this.log(label, message);
+    public log(message: unknown, label = 'INFO'): void {
+        this.$log(label, message);
     }
 }
 
