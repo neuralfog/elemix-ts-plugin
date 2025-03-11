@@ -6,11 +6,7 @@
         "sourceMap": true,
         "outDir": "dist",
         "declarationDir": "types",
-        "rootDir": "src",
+        "rootDir": "src"
     },
-    "exclude": [
-        "dist",
-        "types",
-        "node_modules"
-    ]
+    "exclude": ["dist", "types", "node_modules"]
 }
