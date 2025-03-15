@@ -1,6 +1,5 @@
 import * as ts from 'typescript';
 import {
-    extractTemplateText,
     findComponentAtCursor,
     getAllComponents,
     getTokenAtPosition,
@@ -76,81 +75,68 @@ export const autoCompleteComponentProps = (
     ) => {
         try {
             const program = languageService.getProgram();
+            if (!program) {
+                return oldGetCompletionsAtPosition.call(
+                    languageService,
+                    fileName,
+                    position,
+                    options,
+                );
+            }
+            const sourceFile = program.getSourceFile(fileName);
+            if (
+                !sourceFile ||
+                !isInsideHtmlTemplate(sourceFile, position, typescript)
+            ) {
+                return oldGetCompletionsAtPosition.call(
+                    languageService,
+                    fileName,
+                    position,
+                    options,
+                );
+            }
             const prior = oldGetCompletionsAtPosition.call(
                 languageService,
                 fileName,
                 position,
                 options,
             );
-            const sourceFile = program?.getSourceFile(fileName);
-            if (
-                sourceFile &&
-                isInsideHtmlTemplate(sourceFile, position, typescript)
+            const token = getTokenAtPosition(sourceFile, position);
+            if (!token) {
+                return prior;
+            }
+            let templateExpr: ts.Node | undefined = token;
+            while (
+                templateExpr &&
+                !ts.isTaggedTemplateExpression(templateExpr)
             ) {
-                const token = getTokenAtPosition(sourceFile, position);
-                if (!token) {
-                    return prior;
-                }
+                templateExpr = templateExpr.parent;
+            }
+            if (!templateExpr || !ts.isTaggedTemplateExpression(templateExpr)) {
+                return prior;
+            }
+            const template = templateExpr.template;
+            const fullText = template.getFullText();
+            const templateStart = template.getStart();
 
-                let templateExpression: ts.Node | undefined = token;
-                while (
-                    templateExpression &&
-                    !ts.isTaggedTemplateExpression(templateExpression)
-                ) {
-                    templateExpression = templateExpression.parent;
-                }
-                if (
-                    !templateExpression ||
-                    !ts.isTaggedTemplateExpression(templateExpression)
-                ) {
-                    return prior;
-                }
-
-                const templateStart = templateExpression.template.getStart();
-                const templateText = extractTemplateText(
-                    templateExpression,
-                    typescript,
-                );
-                if (!templateText) {
-                    return prior;
-                }
-
-                // First try: get component info at current position.
-                let { componentName, insideTag } = findComponentAtCursor(
-                    templateText,
-                    position,
-                    templateStart,
-                );
-                // If not detected as "inside" but we do have a component name,
-                // try adjusting the position by 1 to catch cases when caret is at the very end.
-                if (!insideTag && componentName) {
-                    const adjusted = findComponentAtCursor(
-                        templateText,
-                        position - 1,
-                        templateStart,
-                    );
-                    if (adjusted.insideTag) {
-                        componentName = adjusted.componentName;
-                        insideTag = true;
-                    }
-                }
-
-                if (insideTag && componentName) {
-                    const components = getAllComponents(program);
-                    const component = components.find(
-                        (c) => c.name === componentName,
-                    );
-                    if (component?.props) {
-                        const propEntries = component.props.map((prop) => ({
-                            name: `:${prop.key}`,
-                            kind: typescript.ScriptElementKind
-                                .memberVariableElement,
-                            sortText: '1',
-                            insertText: `:${prop.key}=\${}`,
-                        }));
-                        prior.entries.push(...propEntries);
-                    }
-                }
+            const { componentName } = findComponentAtCursor(
+                fullText,
+                position,
+                templateStart,
+            );
+            if (!componentName) {
+                return prior;
+            }
+            const components = getAllComponents(program);
+            const component = components.find((c) => c.name === componentName);
+            if (component?.props) {
+                const propEntries = component.props.map((prop) => ({
+                    name: `:${prop.key}`,
+                    kind: typescript.ScriptElementKind.memberVariableElement,
+                    sortText: '1',
+                    insertText: `:${prop.key}=\${}`,
+                }));
+                prior.entries.push(...propEntries);
             }
             return prior;
         } catch (error) {

@@ -1,5 +1,5 @@
 import * as ts from 'typescript';
-import { extractTemplateText, getAllComponents } from '../utils';
+import { getAllComponents } from '../utils';
 
 export const validateProps = (
     languageService: ts.LanguageService,
@@ -24,26 +24,25 @@ export const validateProps = (
                 typescript.isIdentifier(node.tag) &&
                 node.tag.text === 'html'
             ) {
-                const templateText = extractTemplateText(node, typescript);
-                if (templateText) {
-                    // Regex to match component tags (e.g. <Test1 ...>)
-                    // Group 1: component name; Group 2: attribute string.
+                const templateNode = node.template;
+                const templateFullText = templateNode.getFullText();
+                if (templateFullText) {
                     const tagRegex = /<([A-Z][A-Za-z0-9]*)\b([^>]*)>/g;
                     let tagMatch: RegExpExecArray | null;
-                    // biome-ignore lint:
-                    while ((tagMatch = tagRegex.exec(templateText)) !== null) {
+                    while (
+                        // biome-ignore lint:
+                        (tagMatch = tagRegex.exec(templateFullText)) !== null
+                    ) {
                         const compName = tagMatch[1];
                         const attrString = tagMatch[2].trim();
 
-                        // Use a simpler regex to capture provided prop keys by matching :word=
                         const providedProps = new Set<string>();
                         const attrRegex = /:(\w+)=/g;
-                        let attrMatch: RegExpExecArray | null;
-                        while (
-                            // biome-ignore lint:
-                            (attrMatch = attrRegex.exec(attrString)) !== null
-                        ) {
-                            providedProps.add(attrMatch[1].trim());
+                        let m: RegExpExecArray | null;
+
+                        // biome-ignore lint:
+                        while ((m = attrRegex.exec(attrString)) !== null) {
+                            providedProps.add(m[1].trim());
                         }
 
                         const component = allComponents.find(
@@ -55,15 +54,12 @@ export const validateProps = (
                                     !prop.optional &&
                                     !providedProps.has(prop.key)
                                 ) {
-                                    const start =
-                                        node.getStart() +
-                                        tagMatch.index +
-                                        compName.length +
-                                        1;
-
                                     pluginDiags.push({
                                         file: sourceFile,
-                                        start,
+                                        start:
+                                            templateNode.getStart() +
+                                            tagMatch.index +
+                                            1,
                                         length: compName.length,
                                         messageText: `Component <${compName}> is missing required prop ':${prop.key}'.`,
                                         category:

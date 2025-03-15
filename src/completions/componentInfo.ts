@@ -1,6 +1,5 @@
 import * as ts from 'typescript';
 import {
-    extractTemplateText,
     findFullComponentAtCursor,
     getAllComponents,
     getImportPath,
@@ -60,21 +59,12 @@ export const autoCompleteComponentHover = (
                 );
             }
 
-            const templateStart = templateExpression.template.getStart();
-            const templateText = extractTemplateText(
-                templateExpression,
-                typescript,
-            );
-            if (!templateText) {
-                return oldGetQuickInfoAtPosition.call(
-                    languageService,
-                    fileName,
-                    position,
-                );
-            }
+            const templateNode = templateExpression.template;
+            const templateFullText = templateNode.getFullText();
+            const templateStart = templateNode.getStart();
 
             const { componentName, insideTag } = findFullComponentAtCursor(
-                templateText,
+                templateFullText,
                 position,
                 templateStart,
             );
@@ -88,20 +78,16 @@ export const autoCompleteComponentHover = (
                     let helpText = `(alias) class ${component.name}\n\n`;
                     if (component.props) {
                         helpText += 'Props:\n';
-
                         for (const prop of component.props) {
                             helpText += `  • ${prop.key}${prop.optional ? '?' : ''}: ${prop.type}\n`;
                         }
                     }
-
-                    if (component.slots.length) {
+                    if (component?.slots.length) {
                         helpText += 'Slots:\n';
-
                         for (const slot of component.slots) {
                             helpText += `  • ${slot}\n`;
                         }
                     }
-
                     helpText += `\nimport { ${component.name} } from '${getImportPath(fileName, component.file)}';`;
 
                     const displayParts: ts.SymbolDisplayPart[] = [

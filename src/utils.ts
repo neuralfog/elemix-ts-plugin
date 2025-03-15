@@ -1,6 +1,5 @@
 import * as ts from 'typescript';
 import * as path from 'node:path';
-import { logger } from './Logger';
 
 type ComponentInfo = {
     name: string;
@@ -84,24 +83,6 @@ const getComponentSlots = (
     }
     visit(node);
     return Array.from(slotsSet);
-};
-
-const componentHasSlot = (
-    node: ts.ClassDeclaration,
-    typescript: typeof ts,
-): boolean => {
-    let found = false;
-    function visit(child: ts.Node) {
-        if (typescript.isTaggedTemplateExpression(child)) {
-            const templateText = extractTemplateText(child, typescript);
-            if (templateText?.includes('<slot')) {
-                found = true;
-            }
-        }
-        ts.forEachChild(child, visit);
-    }
-    visit(node);
-    return found;
 };
 
 const getTypeProperties = (
@@ -211,39 +192,27 @@ export const extractTemplateText = (
 };
 
 export const findComponentAtCursor = (
-    templateText: string,
+    fullTemplateText: string,
     position: number,
     templateStart: number,
-): { componentName: string | null; insideTag: boolean } => {
-    const relativePosition = position - templateStart;
-    if (relativePosition < 0 || relativePosition > templateText.length) {
-        return { componentName: null, insideTag: false };
+): { componentName: string | null } => {
+    const relativePos = position - templateStart;
+    if (relativePos < 0 || relativePos > fullTemplateText.length) {
+        return { componentName: null };
     }
-
-    const textBeforeCursor = templateText.substring(0, relativePosition);
-
-    let lastOpenAngle = textBeforeCursor.lastIndexOf('<');
-    while (
-        lastOpenAngle !== -1 &&
-        textBeforeCursor[lastOpenAngle + 1] === '/'
-    ) {
-        lastOpenAngle = textBeforeCursor.lastIndexOf('<', lastOpenAngle - 1);
+    const textBefore = fullTemplateText.substring(0, relativePos);
+    const lastLt = textBefore.lastIndexOf('<');
+    if (lastLt === -1) {
+        return { componentName: null };
     }
-    if (lastOpenAngle === -1) {
-        return { componentName: null, insideTag: false };
-    }
+    const gtIndex = fullTemplateText.indexOf('>', lastLt);
+    const tagFragment =
+        gtIndex !== -1
+            ? fullTemplateText.substring(lastLt, gtIndex + 1)
+            : textBefore.substring(lastLt);
 
-    const afterAngle = textBeforeCursor.substring(lastOpenAngle + 1);
-
-    const match = /^([A-Z][A-Za-z0-9]*)/.exec(afterAngle);
-    if (match) {
-        return {
-            componentName: match[1],
-            insideTag: true,
-        };
-    }
-
-    return { componentName: null, insideTag: false };
+    const match = /^<\s*([A-Z][A-Za-z0-9]*)/.exec(tagFragment);
+    return { componentName: match ? match[1] : null };
 };
 
 export const isComponentImported = (
@@ -347,30 +316,31 @@ export const findFullComponentAtCursor = (
     position: number,
     templateStart: number,
 ): { componentName: string | null; insideTag: boolean } => {
-    // Calculate the cursor's position relative to the start of the template
     const relativePosition = position - templateStart;
     if (relativePosition < 0 || relativePosition > templateText.length) {
         return { componentName: null, insideTag: false };
     }
 
-    // Find the last occurrence of '<' before the relative cursor position
-    const lastOpenAngle = templateText.lastIndexOf('<', relativePosition);
+    const textBeforeCursor = templateText.substring(0, relativePosition);
+    const lastOpenAngle = textBeforeCursor.lastIndexOf('<');
     if (lastOpenAngle === -1) {
         return { componentName: null, insideTag: false };
     }
 
-    // Get the substring starting from the last '<'
-    const tagText = templateText.substring(lastOpenAngle);
-
-    const match = /^<\s*([A-Z][A-Za-z0-9]*)/.exec(tagText);
-    if (match) {
-        logger.log(match[1], '✅ Full Component Found:');
-        return {
-            componentName: match[1],
-            insideTag: true,
-        };
+    const closingAngle = templateText.indexOf('>', lastOpenAngle);
+    let tagFragment: string;
+    if (closingAngle !== -1) {
+        tagFragment = templateText.substring(lastOpenAngle, closingAngle + 1);
+    } else {
+        tagFragment = templateText.substring(lastOpenAngle);
     }
 
-    logger.log('❌ No Component Match Found', 'findFullComponentAtCursor');
+    const insideTag =
+        closingAngle === -1 ? true : relativePosition <= closingAngle + 1;
+
+    const match = /^<\s*([A-Z][A-Za-z0-9]*)/.exec(tagFragment);
+    if (match) {
+        return { componentName: match[1], insideTag };
+    }
     return { componentName: null, insideTag: false };
 };
