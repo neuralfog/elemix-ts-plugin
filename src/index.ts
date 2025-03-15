@@ -8,6 +8,7 @@ import {
 import { codeFixesComponentImports } from './code-actions/import-components';
 import { preserveComponentImports } from './diagnostics/component-imports';
 import { autoCompleteComponentHover } from './completions/componentInfo';
+import { validateProps } from './diagnostics/component-props';
 
 function init({
     typescript,
@@ -16,7 +17,6 @@ function init({
         create(info: tsServer.server.PluginCreateInfo) {
             logger.log('Plugin Initialized...');
             const languageService = info.languageService;
-            const languageServiceHost = info.languageServiceHost;
 
             try {
                 autoCompleteComponentsInTemplate(languageService, typescript);
@@ -26,6 +26,7 @@ function init({
                 preserveComponentImports(languageService, typescript);
 
                 codeFixesComponentImports(languageService);
+                validateProps(languageService, typescript);
             } catch (error) {
                 logger.log(error, 'ERROR');
             }

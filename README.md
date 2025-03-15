@@ -42,8 +42,8 @@ JSX like template syntax and Typescript checking
     - [x] Add `slots` key to structure that list all components as boolean
     - [x] Autocomplete component `<CompName />` - no slots, `<CompName></CompName>` - with slots
     - [x] List the slots by names in component info hover, if no named slots just do slots `default`
-- [] Props - 1st Pass
-    - [] Detect missing props and report an error if prop is not optional
+- [x] Props - 1st Pass
+    - [x] Detect missing props and report an error if prop is not optional
 - [] Props = 2nd Pass
     - [] Type checking for props
 - [] I need to transpile templates now :|

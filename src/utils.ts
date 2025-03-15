@@ -53,7 +53,6 @@ export const getAllComponents = (program: ts.Program): ComponentInfo[] => {
             ts.forEachChild(node, visit);
         });
     }
-    logger.log(components, 'COMPONENTS');
     return components;
 };
 

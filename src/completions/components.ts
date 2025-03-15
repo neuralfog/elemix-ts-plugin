@@ -87,8 +87,6 @@ export const autoCompleteComponentProps = (
                 sourceFile &&
                 isInsideHtmlTemplate(sourceFile, position, typescript)
             ) {
-                logger.log('Providing prop completions...');
-
                 const token = getTokenAtPosition(sourceFile, position);
                 if (!token) {
                     return prior;
@@ -101,7 +99,6 @@ export const autoCompleteComponentProps = (
                 ) {
                     templateExpression = templateExpression.parent;
                 }
-
                 if (
                     !templateExpression ||
                     !ts.isTaggedTemplateExpression(templateExpression)
@@ -110,7 +107,6 @@ export const autoCompleteComponentProps = (
                 }
 
                 const templateStart = templateExpression.template.getStart();
-
                 const templateText = extractTemplateText(
                     templateExpression,
                     typescript,
@@ -119,23 +115,31 @@ export const autoCompleteComponentProps = (
                     return prior;
                 }
 
-                logger.log(templateText, 'TEXT');
-
-                const { componentName, insideTag } = findComponentAtCursor(
+                // First try: get component info at current position.
+                let { componentName, insideTag } = findComponentAtCursor(
                     templateText,
                     position,
                     templateStart,
                 );
-
-                logger.log(componentName);
-                logger.log(insideTag);
+                // If not detected as "inside" but we do have a component name,
+                // try adjusting the position by 1 to catch cases when caret is at the very end.
+                if (!insideTag && componentName) {
+                    const adjusted = findComponentAtCursor(
+                        templateText,
+                        position - 1,
+                        templateStart,
+                    );
+                    if (adjusted.insideTag) {
+                        componentName = adjusted.componentName;
+                        insideTag = true;
+                    }
+                }
 
                 if (insideTag && componentName) {
                     const components = getAllComponents(program);
                     const component = components.find(
                         (c) => c.name === componentName,
                     );
-
                     if (component?.props) {
                         const propEntries = component.props.map((prop) => ({
                             name: `:${prop.key}`,
@@ -144,14 +148,18 @@ export const autoCompleteComponentProps = (
                             sortText: '1',
                             insertText: `:${prop.key}=\${}`,
                         }));
-
                         prior.entries.push(...propEntries);
                     }
                 }
             }
             return prior;
         } catch (error) {
-            logger.log(error, 'ERROR');
+            return oldGetCompletionsAtPosition.call(
+                languageService,
+                fileName,
+                position,
+                options,
+            );
         }
     };
 };
