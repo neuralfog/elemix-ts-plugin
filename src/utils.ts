@@ -6,6 +6,7 @@ type ComponentInfo = {
     name: string;
     file: string;
     props?: PropInfo[];
+    slots?: string[];
 };
 
 type PropInfo = {
@@ -42,12 +43,11 @@ export const getAllComponents = (program: ts.Program): ComponentInfo[] => {
     for (const sourceFile of program.getSourceFiles()) {
         ts.forEachChild(sourceFile, function visit(node) {
             if (isComponentClass(node) && node.name) {
-                const propsType = getComponentGenericType(node, checker);
-
                 components.push({
                     name: node.name.text,
                     file: sourceFile.fileName,
-                    props: propsType,
+                    props: getComponentGenericType(node, checker),
+                    slots: getComponentSlots(node, ts),
                 });
             }
             ts.forEachChild(node, visit);
@@ -55,6 +55,54 @@ export const getAllComponents = (program: ts.Program): ComponentInfo[] => {
     }
     logger.log(components, 'COMPONENTS');
     return components;
+};
+
+const getComponentSlots = (
+    node: ts.ClassDeclaration,
+    ts: typeof import('typescript'),
+): string[] => {
+    const slotsSet = new Set<string>();
+
+    function visit(child: ts.Node) {
+        if (ts.isTaggedTemplateExpression(child)) {
+            const templateText = extractTemplateText(child, ts);
+            if (templateText) {
+                const slotRegex = /<slot\b([^>]*)>/g;
+                let match: RegExpExecArray | null;
+                // biome-ignore lint:
+                while ((match = slotRegex.exec(templateText)) !== null) {
+                    const attributes = match[1];
+                    const nameMatch = /name\s*=\s*"([^"]+)"/.exec(attributes);
+                    if (nameMatch) {
+                        slotsSet.add(nameMatch[1]);
+                    } else {
+                        slotsSet.add('default');
+                    }
+                }
+            }
+        }
+        ts.forEachChild(child, visit);
+    }
+    visit(node);
+    return Array.from(slotsSet);
+};
+
+const componentHasSlot = (
+    node: ts.ClassDeclaration,
+    typescript: typeof ts,
+): boolean => {
+    let found = false;
+    function visit(child: ts.Node) {
+        if (typescript.isTaggedTemplateExpression(child)) {
+            const templateText = extractTemplateText(child, typescript);
+            if (templateText?.includes('<slot')) {
+                found = true;
+            }
+        }
+        ts.forEachChild(child, visit);
+    }
+    visit(node);
+    return found;
 };
 
 const getTypeProperties = (

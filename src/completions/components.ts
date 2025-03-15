@@ -38,9 +38,9 @@ export const autoCompleteComponentsInTemplate = (
                 name: comp.name,
                 kind: typescript.ScriptElementKind.classElement,
                 sortText: '0',
-                // When accepted, insert a tag pair (e.g. <Test1></Test1>)
-                // Would be nice to have self closing completion for components
-                insertText: `<${comp.name}></${comp.name}>`,
+                insertText: comp.slots.length
+                    ? `<${comp.name}></${comp.name}>`
+                    : `<${comp.name} />`,
                 data: {
                     isComponent: true,
                     name: comp.name,

@@ -89,10 +89,19 @@ export const autoCompleteComponentHover = (
                     if (component.props) {
                         helpText += 'Props:\n';
 
-                        for (const el of component.props) {
-                            helpText += `  • ${el.key}${el.optional ? '?' : ''}: ${el.type}\n`;
+                        for (const prop of component.props) {
+                            helpText += `  • ${prop.key}${prop.optional ? '?' : ''}: ${prop.type}\n`;
                         }
                     }
+
+                    if (component.slots.length) {
+                        helpText += 'Slots:\n';
+
+                        for (const slot of component.slots) {
+                            helpText += `  • ${slot}\n`;
+                        }
+                    }
+
                     helpText += `\nimport { ${component.name} } from '${getImportPath(fileName, component.file)}';`;
 
                     const displayParts: ts.SymbolDisplayPart[] = [
