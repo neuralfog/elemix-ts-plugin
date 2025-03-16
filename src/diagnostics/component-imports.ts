@@ -1,19 +1,10 @@
 import * as ts from 'typescript';
-import {
-    getAllComponents,
-    getUsedComponents,
-    isComponentDefinedInFile,
-    isComponentImported,
-} from '../utils';
+import { getAllComponents, getUsedComponents, isComponentDefinedInFile, isComponentImported } from '../utils';
 
-export const preserveComponentImports = (
-    languageService: ts.LanguageService,
-    typescript: typeof ts,
-) => {
+export const preserveComponentImports = (languageService: ts.LanguageService, typescript: typeof ts) => {
     const oldGetSemanticDiagnostics = languageService.getSemanticDiagnostics;
     languageService.getSemanticDiagnostics = (fileName: string) => {
-        let baseDiags =
-            oldGetSemanticDiagnostics.call(languageService, fileName) || [];
+        let baseDiags = oldGetSemanticDiagnostics.call(languageService, fileName) || [];
         const program = languageService.getProgram();
         if (!program) return baseDiags;
         const sourceFile = program.getSourceFile(fileName);
@@ -49,6 +40,8 @@ export const preserveComponentImports = (
                 if (templateText) {
                     const tagRegex = /<([A-Z][A-Za-z0-9]*)\b/g;
                     let tagMatch: RegExpExecArray | null;
+
+                    // biome-ignore lint:
                     while ((tagMatch = tagRegex.exec(templateText)) !== null) {
                         const compName = tagMatch[1];
                         const diagStart = templateInnerStart + tagMatch.index;
@@ -62,8 +55,7 @@ export const preserveComponentImports = (
                                     start: diagStart,
                                     length: compName.length,
                                     messageText: `Component <${compName}> is used in template but not imported.`,
-                                    category:
-                                        typescript.DiagnosticCategory.Error,
+                                    category: typescript.DiagnosticCategory.Error,
                                     code: 9999,
                                 };
                                 pluginDiags.push(diag);

@@ -44,8 +44,12 @@ JSX like template syntax and Typescript checking
     - [x] List the slots by names in component info hover, if no named slots just do slots `default`
 - [x] Props - 1st Pass
     - [x] Detect missing props and report an error if prop is not optional
-- [] Props = 2nd Pass
-    - [] Type checking for props
+- [x] Props = 2nd Pass
+    - [x] Type checking for props
+
+- [] So much refactoring - it has to wait - it works!! :tada:
+
+
 - [] I need to transpile templates now :|
     - [] Ensure imports are not tree shaken
         ```

@@ -1,45 +1,20 @@
 import * as ts from 'typescript';
-import {
-    findComponentAtCursor,
-    getAllComponents,
-    getTokenAtPosition,
-    isInsideHtmlTemplate,
-} from '../utils';
-import { logger } from '../Logger';
+import { findComponentAtCursor, getAllComponents, getTokenAtPosition, isInsideHtmlTemplate } from '../utils';
 
-export const autoCompleteComponentsInTemplate = (
-    languageService: ts.LanguageService,
-    typescript: typeof ts,
-) => {
-    const oldGetCompletionsAtPosition =
-        languageService.getCompletionsAtPosition;
+export const autoCompleteComponentsInTemplate = (languageService: ts.LanguageService, typescript: typeof ts) => {
+    const oldGetCompletionsAtPosition = languageService.getCompletionsAtPosition;
 
-    languageService.getCompletionsAtPosition = (
-        fileName,
-        position,
-        options,
-    ) => {
+    languageService.getCompletionsAtPosition = (fileName, position, options) => {
         const program = languageService.getProgram();
-        let prior = oldGetCompletionsAtPosition.call(
-            languageService,
-            fileName,
-            position,
-            options,
-        );
+        let prior = oldGetCompletionsAtPosition.call(languageService, fileName, position, options);
         const sourceFile = program?.getSourceFile(fileName);
-        if (
-            sourceFile &&
-            isInsideHtmlTemplate(sourceFile, position, typescript)
-        ) {
-            logger.log('Providing component completions...');
+        if (sourceFile && isInsideHtmlTemplate(sourceFile, position, typescript)) {
             const components = getAllComponents(program);
             const customEntries = components.map((comp) => ({
                 name: comp.name,
                 kind: typescript.ScriptElementKind.classElement,
                 sortText: '0',
-                insertText: comp.slots.length
-                    ? `<${comp.name}></${comp.name}>`
-                    : `<${comp.name} />`,
+                insertText: comp.slots.length ? `<${comp.name}></${comp.name}>` : `<${comp.name} />`,
                 data: {
                     isComponent: true,
                     name: comp.name,
@@ -61,55 +36,26 @@ export const autoCompleteComponentsInTemplate = (
     };
 };
 
-export const autoCompleteComponentProps = (
-    languageService: ts.LanguageService,
-    typescript: typeof ts,
-) => {
-    const oldGetCompletionsAtPosition =
-        languageService.getCompletionsAtPosition;
+export const autoCompleteComponentProps = (languageService: ts.LanguageService, typescript: typeof ts) => {
+    const oldGetCompletionsAtPosition = languageService.getCompletionsAtPosition;
 
-    languageService.getCompletionsAtPosition = (
-        fileName,
-        position,
-        options,
-    ) => {
+    languageService.getCompletionsAtPosition = (fileName, position, options) => {
         try {
             const program = languageService.getProgram();
             if (!program) {
-                return oldGetCompletionsAtPosition.call(
-                    languageService,
-                    fileName,
-                    position,
-                    options,
-                );
+                return oldGetCompletionsAtPosition.call(languageService, fileName, position, options);
             }
             const sourceFile = program.getSourceFile(fileName);
-            if (
-                !sourceFile ||
-                !isInsideHtmlTemplate(sourceFile, position, typescript)
-            ) {
-                return oldGetCompletionsAtPosition.call(
-                    languageService,
-                    fileName,
-                    position,
-                    options,
-                );
+            if (!sourceFile || !isInsideHtmlTemplate(sourceFile, position, typescript)) {
+                return oldGetCompletionsAtPosition.call(languageService, fileName, position, options);
             }
-            const prior = oldGetCompletionsAtPosition.call(
-                languageService,
-                fileName,
-                position,
-                options,
-            );
+            const prior = oldGetCompletionsAtPosition.call(languageService, fileName, position, options);
             const token = getTokenAtPosition(sourceFile, position);
             if (!token) {
                 return prior;
             }
             let templateExpr: ts.Node | undefined = token;
-            while (
-                templateExpr &&
-                !ts.isTaggedTemplateExpression(templateExpr)
-            ) {
+            while (templateExpr && !ts.isTaggedTemplateExpression(templateExpr)) {
                 templateExpr = templateExpr.parent;
             }
             if (!templateExpr || !ts.isTaggedTemplateExpression(templateExpr)) {
@@ -119,11 +65,7 @@ export const autoCompleteComponentProps = (
             const fullText = template.getFullText();
             const templateStart = template.getStart();
 
-            const { componentName } = findComponentAtCursor(
-                fullText,
-                position,
-                templateStart,
-            );
+            const { componentName } = findComponentAtCursor(fullText, position, templateStart);
             if (!componentName) {
                 return prior;
             }
@@ -140,12 +82,7 @@ export const autoCompleteComponentProps = (
             }
             return prior;
         } catch (error) {
-            return oldGetCompletionsAtPosition.call(
-                languageService,
-                fileName,
-                position,
-                options,
-            );
+            return oldGetCompletionsAtPosition.call(languageService, fileName, position, options);
         }
     };
 };

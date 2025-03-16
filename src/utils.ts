@@ -11,13 +11,11 @@ type ComponentInfo = {
 type PropInfo = {
     key: string;
     type: string;
+    typeObject: ts.Type;
     optional: boolean;
 };
 
-export const getComponentGenericType = (
-    node: ts.ClassDeclaration,
-    checker: ts.TypeChecker,
-): PropInfo[] | undefined => {
+export const getComponentGenericType = (node: ts.ClassDeclaration, checker: ts.TypeChecker): PropInfo[] | undefined => {
     if (!node.heritageClauses) return undefined;
 
     for (const heritage of node.heritageClauses) {
@@ -55,10 +53,7 @@ export const getAllComponents = (program: ts.Program): ComponentInfo[] => {
     return components;
 };
 
-const getComponentSlots = (
-    node: ts.ClassDeclaration,
-    ts: typeof import('typescript'),
-): string[] => {
+const getComponentSlots = (node: ts.ClassDeclaration, ts: typeof import('typescript')): string[] => {
     const slotsSet = new Set<string>();
 
     function visit(child: ts.Node) {
@@ -85,37 +80,28 @@ const getComponentSlots = (
     return Array.from(slotsSet);
 };
 
-const getTypeProperties = (
-    typeNode: ts.TypeNode,
-    checker: ts.TypeChecker,
-): PropInfo[] => {
+function getTypeProperties(typeNode: ts.TypeNode, checker: ts.TypeChecker): PropInfo[] {
     const props: PropInfo[] = [];
     const type = checker.getTypeFromTypeNode(typeNode);
 
     for (const prop of type.getProperties()) {
+        // Skip properties without a declaration.
         if (!prop.valueDeclaration) continue;
+        const propType = checker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration);
 
-        const propType = checker.getTypeOfSymbolAtLocation(
-            prop,
-            prop.valueDeclaration,
-        );
-        const typeString = checker.typeToString(propType);
-        let optional = false;
+        const isOptional =
+            (prop.getFlags() & ts.SymbolFlags.Optional) !== 0 ||
+            (propType.isUnion() && propType.types.some((t) => (t.flags & ts.TypeFlags.Undefined) !== 0));
 
-        if (propType.isUnion()) {
-            const unionTypes = (propType as ts.UnionType).types;
-            optional = unionTypes.some(
-                (t) => (t.flags & ts.TypeFlags.Undefined) !== 0,
-            );
-        } else {
-            optional = (propType.flags & ts.TypeFlags.Undefined) !== 0;
-        }
-
-        props.push({ key: prop.getName(), type: typeString, optional });
+        props.push({
+            key: prop.getName(),
+            type: checker.typeToString(propType),
+            typeObject: propType,
+            optional: isOptional,
+        });
     }
-
     return props;
-};
+}
 
 const isComponentClass = (node: ts.Node): node is ts.ClassDeclaration => {
     if (!node || !ts.isClassDeclaration(node)) return false;
@@ -124,20 +110,14 @@ const isComponentClass = (node: ts.Node): node is ts.ClassDeclaration => {
         !!decorators &&
         decorators.some((dec) => {
             if (ts.isCallExpression(dec.expression)) {
-                return (
-                    ts.isIdentifier(dec.expression.expression) &&
-                    dec.expression.expression.text === 'component'
-                );
+                return ts.isIdentifier(dec.expression.expression) && dec.expression.expression.text === 'component';
             }
             return false;
         })
     );
 };
 
-export const getTokenAtPosition = (
-    sourceFile: ts.SourceFile,
-    position: number,
-): ts.Node | undefined => {
+export const getTokenAtPosition = (sourceFile: ts.SourceFile, position: number): ts.Node | undefined => {
     function find(node: ts.Node): ts.Node | undefined {
         if (position >= node.getFullStart() && position < node.getEnd()) {
             let found: ts.Node | undefined;
@@ -206,19 +186,13 @@ export const findComponentAtCursor = (
         return { componentName: null };
     }
     const gtIndex = fullTemplateText.indexOf('>', lastLt);
-    const tagFragment =
-        gtIndex !== -1
-            ? fullTemplateText.substring(lastLt, gtIndex + 1)
-            : textBefore.substring(lastLt);
+    const tagFragment = gtIndex !== -1 ? fullTemplateText.substring(lastLt, gtIndex + 1) : textBefore.substring(lastLt);
 
     const match = /^<\s*([A-Z][A-Za-z0-9]*)/.exec(tagFragment);
     return { componentName: match ? match[1] : null };
 };
 
-export const isComponentImported = (
-    sourceFile: ts.SourceFile,
-    componentName: string,
-): boolean => {
+export const isComponentImported = (sourceFile: ts.SourceFile, componentName: string): boolean => {
     let imported = false;
     sourceFile.forEachChild((node) => {
         if (ts.isImportDeclaration(node) && node.importClause) {
@@ -231,10 +205,7 @@ export const isComponentImported = (
                 }
             }
             // Also consider default imports if applicable:
-            if (
-                node.importClause.name &&
-                node.importClause.name.text === componentName
-            ) {
+            if (node.importClause.name && node.importClause.name.text === componentName) {
                 imported = true;
             }
         }
@@ -242,27 +213,17 @@ export const isComponentImported = (
     return imported;
 };
 
-export const isComponentDefinedInFile = (
-    sourceFile: ts.SourceFile,
-    componentName: string,
-): boolean => {
+export const isComponentDefinedInFile = (sourceFile: ts.SourceFile, componentName: string): boolean => {
     let defined = false;
     sourceFile.forEachChild((node) => {
-        if (
-            ts.isClassDeclaration(node) &&
-            node.name &&
-            node.name.text === componentName
-        ) {
+        if (ts.isClassDeclaration(node) && node.name && node.name.text === componentName) {
             defined = true;
         }
     });
     return defined;
 };
 
-export const getImportPath = (
-    currentFile: string,
-    targetFile: string,
-): string => {
+export const getImportPath = (currentFile: string, targetFile: string): string => {
     let relativePath = path.relative(path.dirname(currentFile), targetFile);
     relativePath = relativePath.replace(/\.[tj]sx?$/, '');
     if (!relativePath.startsWith('.')) {
@@ -271,10 +232,7 @@ export const getImportPath = (
     return relativePath;
 };
 
-export const getUsedComponents = (
-    sourceFile: ts.SourceFile,
-    ts: typeof import('typescript'),
-): Set<string> => {
+export const getUsedComponents = (sourceFile: ts.SourceFile, ts: typeof import('typescript')): Set<string> => {
     const used = new Set<string>();
     function visit(node: ts.Node) {
         if (ts.isTaggedTemplateExpression(node)) {
@@ -296,15 +254,10 @@ export const getUsedComponents = (
     return used;
 };
 
-export const getImportInsertionPosition = (
-    sourceFile: ts.SourceFile,
-): number => {
+export const getImportInsertionPosition = (sourceFile: ts.SourceFile): number => {
     let lastImportEnd = 0;
     sourceFile.forEachChild((node) => {
-        if (
-            ts.isImportDeclaration(node) ||
-            ts.isImportEqualsDeclaration(node)
-        ) {
+        if (ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node)) {
             lastImportEnd = node.getEnd();
         }
     });
@@ -335,8 +288,7 @@ export const findFullComponentAtCursor = (
         tagFragment = templateText.substring(lastOpenAngle);
     }
 
-    const insideTag =
-        closingAngle === -1 ? true : relativePosition <= closingAngle + 1;
+    const insideTag = closingAngle === -1 ? true : relativePosition <= closingAngle + 1;
 
     const match = /^<\s*([A-Z][A-Za-z0-9]*)/.exec(tagFragment);
     if (match) {

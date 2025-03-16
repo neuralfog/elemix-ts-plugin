@@ -4,12 +4,7 @@ import * as os from 'node:os';
 import { inspect } from 'node:util';
 
 class Logger {
-    private file = path.join(
-        os.homedir(),
-        '.local',
-        'elemix-ts-plugin',
-        'logs.log',
-    );
+    private file = path.join(os.homedir(), '.local', 'elemix-ts-plugin', 'logs.log');
 
     constructor() {
         const directory = path.dirname(this.file);
@@ -22,9 +17,7 @@ class Logger {
         if (message instanceof Error) {
             return message.stack || message.message;
         }
-        return typeof message === 'object'
-            ? inspect(message, { depth: null })
-            : String(message);
+        return typeof message === 'object' ? inspect(message, { depth: null }) : String(message);
     }
 
     private $log(label: string, message: unknown): void {

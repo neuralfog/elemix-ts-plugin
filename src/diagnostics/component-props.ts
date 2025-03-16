@@ -1,14 +1,18 @@
 import * as ts from 'typescript';
 import { getAllComponents } from '../utils';
 
-export const validateProps = (
-    languageService: ts.LanguageService,
-    typescript: typeof ts,
-) => {
+type ExpressionMapping = {
+    start: number;
+    end: number;
+    expression: ts.Expression;
+    component?: string;
+    prop?: string;
+};
+
+export const validateProps = (languageService: ts.LanguageService, typescript: typeof ts) => {
     const oldGetSemanticDiagnostics = languageService.getSemanticDiagnostics;
     languageService.getSemanticDiagnostics = (fileName: string) => {
-        const baseDiags =
-            oldGetSemanticDiagnostics.call(languageService, fileName) || [];
+        const baseDiags = oldGetSemanticDiagnostics.call(languageService, fileName) || [];
 
         const program = languageService.getProgram();
         if (!program) return baseDiags;
@@ -45,26 +49,104 @@ export const validateProps = (
                             providedProps.add(m[1].trim());
                         }
 
-                        const component = allComponents.find(
-                            (c) => c.name === compName,
-                        );
+                        const component = allComponents.find((c) => c.name === compName);
                         if (component?.props) {
                             for (const prop of component.props) {
-                                if (
-                                    !prop.optional &&
-                                    !providedProps.has(prop.key)
-                                ) {
+                                if (!prop.optional && !providedProps.has(prop.key)) {
                                     pluginDiags.push({
                                         file: sourceFile,
-                                        start:
-                                            templateNode.getStart() +
-                                            tagMatch.index +
-                                            1,
+                                        start: templateNode.getStart() + tagMatch.index + 1,
                                         length: compName.length,
                                         messageText: `Component <${compName}> is missing required prop ':${prop.key}'.`,
-                                        category:
-                                            typescript.DiagnosticCategory.Error,
+                                        category: typescript.DiagnosticCategory.Error,
                                         code: 9997,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            ts.forEachChild(node, visit);
+        }
+        visit(sourceFile);
+        return [...baseDiags, ...pluginDiags];
+    };
+};
+
+export const validatePropsTypes = (languageService: ts.LanguageService, typescript: typeof ts) => {
+    const oldGetSemanticDiagnostics = languageService.getSemanticDiagnostics;
+    languageService.getSemanticDiagnostics = (fileName: string) => {
+        const baseDiags = oldGetSemanticDiagnostics.call(languageService, fileName) || [];
+        const program = languageService.getProgram();
+        if (!program) return baseDiags;
+        const sourceFile = program.getSourceFile(fileName);
+        if (!sourceFile) return baseDiags;
+
+        const pluginDiags: ts.Diagnostic[] = [];
+        const allComponents = getAllComponents(program);
+        const checker = program.getTypeChecker();
+
+        function visit(node: ts.Node) {
+            if (
+                typescript.isTaggedTemplateExpression(node) &&
+                typescript.isIdentifier(node.tag) &&
+                node.tag.text === 'html'
+            ) {
+                const templateText = node.template.getText();
+
+                const expressionMapping: ExpressionMapping[] = [];
+                const templateNode = node.template;
+                const templateStart = templateNode.getStart();
+                if (typescript.isTemplateExpression(templateNode)) {
+                    for (const span of templateNode.templateSpans) {
+                        const spanStart = span.getStart() - templateStart;
+                        const spanEnd = span.getEnd() - templateStart;
+                        expressionMapping.push({
+                            start: spanStart,
+                            end: spanEnd,
+                            expression: span.expression,
+                        });
+                    }
+                }
+
+                for (const expression of expressionMapping) {
+                    const part = templateText.slice(0, expression.start);
+                    const lastSpaceIndex = part.lastIndexOf(' ');
+                    if (lastSpaceIndex === -1) continue;
+
+                    const propText = part.slice(lastSpaceIndex, expression.start).split(' ').join('');
+
+                    if (!propText.startsWith(':')) continue;
+                    const prop = propText.substring(propText.indexOf(':') + 1, propText.indexOf('='));
+
+                    const lastBracketIndex = part.lastIndexOf('<');
+                    if (lastBracketIndex === -1) continue;
+
+                    const componentText = part.slice(lastBracketIndex + 1, expression.start);
+                    const component = componentText.slice(0, componentText.indexOf(' '));
+
+                    expression.prop = prop;
+                    expression.component = component;
+                }
+
+                for (const mapping of expressionMapping) {
+                    if (mapping.component && mapping.prop) {
+                        const compInfo = allComponents.find((c) => c.name === mapping.component);
+                        if (compInfo?.props) {
+                            const propInfo = compInfo.props.find((p) => p.key === mapping.prop);
+                            if (propInfo) {
+                                const providedType = checker.getTypeAtLocation(mapping.expression);
+                                const expectedType = propInfo.typeObject;
+                                if (!checker.isTypeAssignableTo(providedType, expectedType)) {
+                                    const diagStart = node.getStart() + mapping.start - mapping.prop.length + 1;
+                                    pluginDiags.push({
+                                        file: sourceFile,
+                                        start: diagStart,
+                                        length: mapping.prop.length,
+                                        messageText: `Type mismatch for prop ':${mapping.prop}' on <${mapping.component}>. Expected ${propInfo.type}, but got ${checker.typeToString(providedType)}.`,
+                                        category: typescript.DiagnosticCategory.Error,
+                                        code: 9998,
                                     });
                                 }
                             }

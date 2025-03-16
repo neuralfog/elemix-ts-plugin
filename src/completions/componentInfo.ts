@@ -7,73 +7,42 @@ import {
     isInsideHtmlTemplate,
 } from '../utils';
 
-export const autoCompleteComponentHover = (
-    languageService: ts.LanguageService,
-    typescript: typeof ts,
-) => {
+export const autoCompleteComponentHover = (languageService: ts.LanguageService, typescript: typeof ts) => {
     const oldGetQuickInfoAtPosition = languageService.getQuickInfoAtPosition;
 
     languageService.getQuickInfoAtPosition = (fileName, position) => {
         const program = languageService.getProgram();
         if (!program) {
-            return oldGetQuickInfoAtPosition.call(
-                languageService,
-                fileName,
-                position,
-            );
+            return oldGetQuickInfoAtPosition.call(languageService, fileName, position);
         }
         const sourceFile = program.getSourceFile(fileName);
         if (!sourceFile) {
-            return oldGetQuickInfoAtPosition.call(
-                languageService,
-                fileName,
-                position,
-            );
+            return oldGetQuickInfoAtPosition.call(languageService, fileName, position);
         }
 
         if (isInsideHtmlTemplate(sourceFile, position, typescript)) {
             const token = getTokenAtPosition(sourceFile, position);
             if (!token) {
-                return oldGetQuickInfoAtPosition.call(
-                    languageService,
-                    fileName,
-                    position,
-                );
+                return oldGetQuickInfoAtPosition.call(languageService, fileName, position);
             }
 
             let templateExpression: ts.Node | undefined = token;
-            while (
-                templateExpression &&
-                !ts.isTaggedTemplateExpression(templateExpression)
-            ) {
+            while (templateExpression && !ts.isTaggedTemplateExpression(templateExpression)) {
                 templateExpression = templateExpression.parent;
             }
-            if (
-                !templateExpression ||
-                !ts.isTaggedTemplateExpression(templateExpression)
-            ) {
-                return oldGetQuickInfoAtPosition.call(
-                    languageService,
-                    fileName,
-                    position,
-                );
+            if (!templateExpression || !ts.isTaggedTemplateExpression(templateExpression)) {
+                return oldGetQuickInfoAtPosition.call(languageService, fileName, position);
             }
 
             const templateNode = templateExpression.template;
             const templateFullText = templateNode.getFullText();
             const templateStart = templateNode.getStart();
 
-            const { componentName, insideTag } = findFullComponentAtCursor(
-                templateFullText,
-                position,
-                templateStart,
-            );
+            const { componentName, insideTag } = findFullComponentAtCursor(templateFullText, position, templateStart);
 
             if (insideTag && componentName) {
                 const components = getAllComponents(program);
-                const component = components.find(
-                    (c) => c.name === componentName,
-                );
+                const component = components.find((c) => c.name === componentName);
                 if (component) {
                     let helpText = `(alias) class ${component.name}\n\n`;
                     if (component.props) {
@@ -90,9 +59,7 @@ export const autoCompleteComponentHover = (
                     }
                     helpText += `\nimport { ${component.name} } from '${getImportPath(fileName, component.file)}';`;
 
-                    const displayParts: ts.SymbolDisplayPart[] = [
-                        { text: helpText, kind: 'text' },
-                    ];
+                    const displayParts: ts.SymbolDisplayPart[] = [{ text: helpText, kind: 'text' }];
                     return {
                         kind: typescript.ScriptElementKind.classElement,
                         kindModifiers: 'export',
@@ -107,10 +74,6 @@ export const autoCompleteComponentHover = (
             }
         }
 
-        return oldGetQuickInfoAtPosition.call(
-            languageService,
-            fileName,
-            position,
-        );
+        return oldGetQuickInfoAtPosition.call(languageService, fileName, position);
     };
 };
