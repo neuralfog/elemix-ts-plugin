@@ -22,21 +22,37 @@ export const validateProps = (languageService: ts.LanguageService, typescript: t
         const pluginDiags: ts.Diagnostic[] = [];
         const allComponents = getAllComponents(program);
 
+        // extract to utils
+        function isNestedHTML(node: ts.Node): boolean {
+            let current = node.parent;
+            while (current) {
+                if (
+                    typescript.isTaggedTemplateExpression(current) &&
+                    typescript.isIdentifier(current.tag) &&
+                    current.tag.text === 'html'
+                ) {
+                    return true;
+                }
+                current = current.parent;
+            }
+            return false;
+        }
+
         function visit(node: ts.Node) {
             if (
                 typescript.isTaggedTemplateExpression(node) &&
                 typescript.isIdentifier(node.tag) &&
-                node.tag.text === 'html'
+                node.tag.text === 'html' &&
+                !isNestedHTML(node)
             ) {
                 const templateNode = node.template;
                 const templateFullText = templateNode.getFullText();
                 if (templateFullText) {
                     const tagRegex = /<([A-Z][A-Za-z0-9]*)\b([^>]*)>/g;
                     let tagMatch: RegExpExecArray | null;
-                    while (
-                        // biome-ignore lint:
-                        (tagMatch = tagRegex.exec(templateFullText)) !== null
-                    ) {
+
+                    // biome-ignore lint:
+                    while ((tagMatch = tagRegex.exec(templateFullText)) !== null) {
                         const compName = tagMatch[1];
                         const attrString = tagMatch[2].trim();
 
@@ -87,6 +103,11 @@ export const validatePropsTypes = (languageService: ts.LanguageService, typescri
         const allComponents = getAllComponents(program);
         const checker = program.getTypeChecker();
 
+        // extract to utils
+        function isWhitespace(char: string): boolean {
+            return char === ' ' || char === '\t' || char === '\n' || char === '\r';
+        }
+
         function visit(node: ts.Node) {
             if (
                 typescript.isTaggedTemplateExpression(node) &&
@@ -112,19 +133,24 @@ export const validatePropsTypes = (languageService: ts.LanguageService, typescri
 
                 for (const expression of expressionMapping) {
                     const part = templateText.slice(0, expression.start);
-                    const lastSpaceIndex = part.lastIndexOf(' ');
-                    if (lastSpaceIndex === -1) continue;
 
-                    const propText = part.slice(lastSpaceIndex, expression.start).split(' ').join('');
-
-                    if (!propText.startsWith(':')) continue;
-                    const prop = propText.substring(propText.indexOf(':') + 1, propText.indexOf('='));
+                    let token = '';
+                    let i = part.length - 1;
+                    while (i >= 0 && !isWhitespace(part[i])) {
+                        token = part[i] + token;
+                        i--;
+                    }
+                    if (!token.startsWith(':') || token.indexOf('=') === -1) continue;
+                    const prop = token.slice(1, token.indexOf('='));
 
                     const lastBracketIndex = part.lastIndexOf('<');
                     if (lastBracketIndex === -1) continue;
-
-                    const componentText = part.slice(lastBracketIndex + 1, expression.start);
-                    const component = componentText.slice(0, componentText.indexOf(' '));
+                    let component = '';
+                    let j = lastBracketIndex + 1;
+                    while (j < part.length && !isWhitespace(part[j])) {
+                        component += part[j];
+                        j++;
+                    }
 
                     expression.prop = prop;
                     expression.component = component;

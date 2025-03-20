@@ -47,18 +47,23 @@ JSX like template syntax and Typescript checking
 - [x] Props = 2nd Pass
     - [x] Type checking for props
 
+---
+
 - [] So much refactoring - it has to wait - it works!! :tada:
-
-
-- [] I need to transpile templates now :|
-    - [] Ensure imports are not tree shaken
-        ```
-        import { Test } from './components' <= this will get removed
-        void Test; <= referenced to preserve import during the bundling
-        ```
-    - [] Could I do it with vite plugin ??
-    - [] Class name in template need to be replaced by tag `Camel Case` => `Kebab Case`
-    - [] Transpile options:
-        - Vite plugin
-        - Typescript transformers
-        - ...
+- [] Add constants with all diagnostic codes enum ftw
+- [] Create a factory to create diagnostic complying with an interface, could be a class, or named functions with minimal parameters
+- [] Common things that need to be shared with vite plugin:
+    - [] Diagnostics only
+    - [] Imports, props, possibly check fort multi word class for component
+    - [] Skip any autocompletion
+- [] Get rid of `isComponentDefinedInFile`
+- [] Extract common features in to a separate package
+- [] Add auto completion for a component keyword: `component~`
+    - [] Trigger when in first line only:
+    ```
+    const { line } = sourceFile.getLineAndCharacterOfPosition(position);
+    if (line === 0) {
+    ```
+- [] Is it worth checking for template literals node, maybe just work on the whole source text :thinking:
+    - [] This would reduce complexity a ton
+- [] Remove diagnostics for non existing components, that is daft!!

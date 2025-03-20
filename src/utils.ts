@@ -204,7 +204,6 @@ export const isComponentImported = (sourceFile: ts.SourceFile, componentName: st
                     }
                 }
             }
-            // Also consider default imports if applicable:
             if (node.importClause.name && node.importClause.name.text === componentName) {
                 imported = true;
             }

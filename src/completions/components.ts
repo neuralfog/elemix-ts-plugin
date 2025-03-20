@@ -75,7 +75,7 @@ export const autoCompleteComponentProps = (languageService: ts.LanguageService, 
                 const propEntries = component.props.map((prop) => ({
                     name: `:${prop.key}`,
                     kind: typescript.ScriptElementKind.memberVariableElement,
-                    sortText: '1',
+                    sortText: '0',
                     insertText: `:${prop.key}=\${}`,
                 }));
                 prior.entries.push(...propEntries);
